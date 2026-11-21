@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cafe Order</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#faf6f1;--card:#fff;--ink:#2b1d14;--mute:#7a6a5e;--acc:#c8602b;--ok:#2e7d4f;--bad:#c0392b;--line:#eadfd3}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1410;--card:#2a1f19;--ink:#f5ece4;--mute:#b3a193;--line:#3b2d24}}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:90px}
+main{max-width:720px;margin:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.top{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;background:var(--acc);color:#fff}
+.top b{font-size:18px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 14px}
+.btn{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+.btn.bad{background:var(--bad);border-color:var(--bad)}
+.btn.big{width:100%;padding:14px;font-size:17px}
+.btn:disabled{opacity:.5}
+.ghost{background:transparent;color:inherit;border-color:transparent}
+.top .ghost{color:#fff}
+.chips,.tabs{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;max-width:720px;margin:auto}
+.chip{white-space:nowrap;border-radius:20px}
+.chip.on{background:var(--ink);color:var(--bg)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.item{display:flex;gap:10px;align-items:center}
+.item img{width:72px;height:72px;object-fit:cover;border-radius:10px}
+.grow{flex:1;min-width:0}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.mute{color:var(--mute)}.small{font-size:13px}.bad{color:var(--bad)}
+.nut{font-size:12px;color:var(--ok);margin:2px 0}
+.price{color:var(--acc)}
+.qty{display:flex;align-items:center;gap:8px}
+.qty button{padding:4px 12px;font-size:18px}
+.pill{background:rgba(127,127,127,.2);border-radius:20px;padding:2px 10px;font-size:13px}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:12px;background:var(--bg);border-top:1px solid var(--line)}
+input,textarea{width:100%;font:inherit;padding:11px;margin:4px 0;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+footer{text-align:center;padding:16px}footer a{color:var(--mute);font-size:13px}
+.center{text-align:center;align-items:center}
+.st{font-size:26px;font-weight:700;margin:20px 0}
+.steps{display:flex;gap:6px;width:100%}.steps i{flex:1;height:8px;border-radius:4px;background:var(--line)}.steps i.on{background:var(--ok)}
+.o.new{border-left:6px solid var(--acc)}.o.accepted{border-left:6px solid #d4a017}.o.ready{border-left:6px solid var(--ok)}
+.o ul{margin:6px 0;padding-left:20px}.note{background:rgba(212,160,23,.2);padding:6px 10px;border-radius:8px}
+.qrs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qr{text-align:center;background:#fff;color:#000;padding:10px;border-radius:10px}.qr img{width:100%}
+@media print{.top,.tabs,.btn,.card,footer{display:none!important}body{background:#fff}.qr{break-inside:avoid}}
+</style></head><body>
+<div id="app"></div>
+<script>
+const SUPABASE_URL='YOUR_SUPABASE_URL', SUPABASE_KEY='YOUR_SUPABASE_ANON_KEY';
+const D={
+en:{all:'All',add:'Add',sold:'Sold out',view:'View order',your:'Your order',note:'Note for the kitchen (optional)',name:'Your name (optional)',place:'Place order',pay:'Pay at the counter after your order.',table:'Table',total:'Total',s_new:'Sent to kitchen',s_accepted:'Being prepared',s_ready:'Ready!',s_served:'Served. Enjoy!',s_cancelled:'Cancelled',cancel:'Cancel order',again:'New order',nut:'Nutrition values are estimates. Please ask staff about allergies.',empty:'Your cart is empty',which:'Table number',late:'Too late, the kitchen already accepted your order.',staff:'Staff',nomenu:'Menu coming soon'},
+ar:{all:'الكل',add:'إضافة',sold:'نفدت الكمية',view:'عرض الطلب',your:'طلبك',note:'ملاحظة للمطبخ (اختياري)',name:'اسمك (اختياري)',place:'إرسال الطلب',pay:'الدفع عند الكاشير بعد الطلب.',table:'طاولة',total:'المجموع',s_new:'تم إرسال الطلب للمطبخ',s_accepted:'قيد التحضير',s_ready:'جاهز!',s_served:'تم التقديم. بالهناء!',s_cancelled:'ملغي',cancel:'إلغاء الطلب',again:'طلب جديد',nut:'القيم الغذائية تقديرية. يرجى سؤال الموظفين عن الحساسية.',empty:'السلة فارغة',which:'رقم الطاولة',late:'فات الأوان، المطبخ قبل طلبك.',staff:'الموظفون',nomenu:'القائمة قريباً'}};
+const $=s=>document.querySelector(s),app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+let lang=ls.get('lang')==='ar'?'ar':'en',timer,lastN=-1;
+const S={items:[],cfg:{name:'Cafe',tables:10,currency:'AED'},cart:{},cat:'All',tab:'orders',table:null};
+const t=k=>D[lang][k]||k,nm=i=>lang==='ar'&&i.name_ar?i.name_ar:i.name,money=v=>(+v).toFixed(2)+' '+(S.cfg.currency||'AED');
+let sb;
+function dir(){document.documentElement.lang=lang;document.documentElement.dir=lang==='ar'&&location.hash!=='#staff'?'rtl':'ltr'}
+function setLang(){lang=lang==='en'?'ar':'en';ls.set('lang',lang);dir();renderMenu()}
+async function load(){const[a,b]=await Promise.all([sb.from('cafe_settings').select('*').eq('id',1).maybeSingle(),sb.from('cafe_items').select('*').order('category').order('name')]);if(a.data)S.cfg=a.data;S.items=b.data||[];return !b.error}
+
+/* ---------- customer ---------- */
+const lines=()=>Object.entries(S.cart).map(([id,q])=>{const i=S.items.find(x=>x.id===id);return i&&{id,name:i.name,name_ar:i.name_ar,qty:q,price:+i.price}}).filter(Boolean);
+const cartTotal=()=>lines().reduce((a,l)=>a+l.qty*l.price,0);
+function chg(id,d,inCart){S.cart[id]=Math.max(0,(S.cart[id]||0)+d);if(!S.cart[id])delete S.cart[id];if(inCart){S.cn=$('#cn')?.value;S.cnote=$('#cnote')?.value;Object.keys(S.cart).length?openCart():renderMenu()}else renderMenu()}
+function card(i){const q=S.cart[i.id]||0,nut=[i.kcal!=null&&i.kcal+' kcal',i.protein!=null&&'P '+i.protein+'g',i.fat!=null&&'F '+i.fat+'g',i.carbs!=null&&'C '+i.carbs+'g'].filter(Boolean).join(' · ');
+return `<div class="card item"><div class="grow"><b>${esc(nm(i))}</b><div class="mute small">${esc(i.description)}</div>${nut?`<div class="nut">${nut}</div>`:''}<b class="price">${money(i.price)}</b></div>${i.image?`<img src="${esc(i.image)}" alt="" loading="lazy">`:''}<div class="qty">${!i.available?`<span class="mute small">${t('sold')}</span>`:q?`<button onclick="chg('${i.id}',-1)">−</button><b>${q}</b><button onclick="chg('${i.id}',1)">+</button>`:`<button class="btn" onclick="chg('${i.id}',1)">${t('add')}</button>`}</div></div>`}
+function renderMenu(){clearInterval(timer);
+const cats=['All',...new Set(S.items.map(i=>i.category||'Menu'))],list=S.items.filter(i=>S.cat==='All'||(i.category||'Menu')===S.cat),n=Object.values(S.cart).reduce((a,b)=>a+b,0);
+app.innerHTML=`<div class="top"><b>${esc(S.cfg.name)}</b><span>${S.table?`<span class="pill">${t('table')} ${esc(S.table)}</span> `:''}<button class="ghost" onclick="setLang()">${lang==='en'?'عربي':'EN'}</button></span></div>
+<div class="chips">${cats.map(c=>`<button class="chip ${c===S.cat?'on':''}" data-c="${esc(c)}" onclick="S.cat=this.dataset.c;renderMenu()">${c==='All'?t('all'):esc(c)}</button>`).join('')}</div>
+<main>${list.map(card).join('')||`<p class="mute">${t('nomenu')}</p>`}<p class="mute small">${t('nut')}</p></main>
+${n?`<div class="bar"><button class="btn big" onclick="openCart()">${t('view')} (${n}) · ${money(cartTotal())}</button></div>`:''}
+<footer><a href="#staff">${t('staff')}</a></footer>`}
+function openCart(){const L=lines();
+app.innerHTML=`<div class="top"><button class="ghost" onclick="renderMenu()">${lang==='ar'?'→':'←'}</button><b>${t('your')}</b><span></span></div><main>
+${L.map(l=>`<div class="card row"><span class="grow">${esc(nm(l))}</span><span class="qty"><button onclick="chg('${l.id}',-1,1)">−</button><b>${l.qty}</b><button onclick="chg('${l.id}',1,1)">+</button></span><b>${money(l.qty*l.price)}</b></div>`).join('')||`<p>${t('empty')}</p>`}
+<input id="cn" placeholder="${t('name')}" value="${esc(S.cn)}"><textarea id="cnote" rows="2" placeholder="${t('note')}">${esc(S.cnote)}</textarea>
+${S.table?'':`<input id="ct" inputmode="numeric" placeholder="${t('which')}">`}
+<div class="row"><b>${t('total')}</b><b class="price">${money(cartTotal())}</b></div><p class="mute small">${t('pay')}</p>
+<button class="btn big" id="place" onclick="place()" ${L.length?'':'disabled'}>${t('place')}</button></main>`}
+async function place(){const L=lines();if(!L.length)return;const tb=S.table||$('#ct')?.value.trim();if(!tb){alert(t('which'));return}
+const id=crypto.randomUUID(),b=$('#place');b.disabled=true;
+const{error}=await sb.from('cafe_orders').insert({id,table_no:String(tb),name:$('#cn').value.trim()||null,note:$('#cnote').value.trim()||null,items:L,total:cartTotal()});
+if(error){alert(error.message);b.disabled=false;return}
+ls.set('oid',id);S.cart={};S.cn=S.cnote='';track(id)}
+async function track(id){clearInterval(timer);
+const draw=async()=>{const{data}=await sb.rpc('cafe_get_order',{oid:id});if(!data){ls.set('oid','');renderMenu();return}
+const st=data.status,steps=['new','accepted','ready','served'],done=['served','cancelled'].includes(st);if(done)clearInterval(timer);
+app.innerHTML=`<div class="top"><b>${esc(S.cfg.name)}</b><span class="pill">${t('table')} ${esc(data.table_no)}</span></div><main class="center"><div class="st">${t('s_'+st)}</div>
+${st!=='cancelled'?`<div class="steps">${steps.map((s,i)=>`<i class="${steps.indexOf(st)>=i?'on':''}"></i>`).join('')}</div>`:''}
+<p>${t('total')}: <b>${money(data.total)}</b> ${data.paid?'✓':''}</p>
+${st==='new'?`<button class="btn bad" onclick="cancelO('${id}')">${t('cancel')}</button>`:''}
+${done?`<button class="btn big" onclick="ls.set('oid','');renderMenu()">${t('again')}</button>`:`<p class="mute small">${t('pay')}</p>`}</main>`};
+await draw();timer=setInterval(draw,4000)}
+async function cancelO(id){if(!confirm(t('cancel')+'?'))return;const{data}=await sb.rpc('cafe_cancel_order',{oid:id});if(!data)alert(t('late'))}
+
+/* ---------- staff ---------- */
+async function staff(){clearInterval(timer);const{data:{session}}=await sb.auth.getSession();if(!session)return loginView();
+const{data:ok}=await sb.rpc('cafe_is_admin');if(!ok)return claimView(session.user.email);
+await load();({orders:ordersView,menu:menuView,setup:setupView}[S.tab]||ordersView)()}
+function loginView(msg=''){app.innerHTML=`<div class="top"><button class="ghost" onclick="location.hash=''">←</button><b>Staff</b><span></span></div><main><p class="bad">${esc(msg)}</p><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password"><button class="btn big" onclick="login()">Sign in</button><button class="ghost" onclick="signup()">Create account</button></main>`}
+async function login(){const{error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});error?loginView(error.message):staff()}
+async function signup(){const{error}=await sb.auth.signUp({email:$('#em').value.trim(),password:$('#pw').value});loginView(error?error.message:'Account created. If asked, confirm your email, then sign in.')}
+function claimView(e){app.innerHTML=`<div class="top"><b>Staff</b><button class="ghost" onclick="logout()">Sign out</button></div><main><p>${esc(e)} is not an admin yet.</p><button class="btn big" onclick="claim()">Make me the admin (first time only)</button></main>`}
+async function claim(){const{data}=await sb.rpc('cafe_claim_admin');data?staff():alert('An admin already exists. Ask them to add your email in Setup.')}
+async function logout(){await sb.auth.signOut();loginView()}
+function shell(inner){app.innerHTML=`<div class="top"><b>${esc(S.cfg.name)} · Staff</b><button class="ghost" onclick="logout()">Sign out</button></div><div class="tabs">${['orders','menu','setup'].map(x=>`<button class="chip ${S.tab===x?'on':''}" onclick="S.tab='${x}';staff()">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div><main>${inner}</main>`}
+function beep(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator();o.connect(c.destination);o.frequency.value=880;o.start();setTimeout(()=>{o.stop();c.close()},350)}catch(e){}}
+const next={new:['accepted','Accept'],accepted:['ready','Ready'],ready:['served','Served']};
+function oc(o){const a=next[o.status],live=!!a;
+return `<div class="card o ${o.status}"><div class="row"><b>Table ${esc(o.table_no)}</b><span class="pill">${o.status}</span><span class="mute small">${new Date(o.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>${o.name?`<div>${esc(o.name)}</div>`:''}<ul>${(o.items||[]).map(i=>`<li>${i.qty}× ${esc(i.name)}</li>`).join('')}</ul>${o.note?`<div class="note">📝 ${esc(o.note)}</div>`:''}
+<div class="row"><b>${money(o.total)}</b><label><input type="checkbox" style="width:auto" ${o.paid?'checked':''} onchange="setO('${o.id}',{paid:this.checked})"> Paid</label></div>
+${live?`<div class="row"><button class="btn" onclick="setO('${o.id}',{status:'${a[0]}'})">${a[1]}</button><button class="btn bad" onclick="if(confirm('Cancel this order?'))setO('${o.id}',{status:'cancelled'})">Cancel</button></div>`:''}</div>`}
+async function setO(id,p){await sb.from('cafe_orders').update(p).eq('id',id);loadOrders()}
+async function loadOrders(){const box=$('#ord');if(!box){clearInterval(timer);return}
+const{data}=await sb.from('cafe_orders').select('*').order('created_at',{ascending:false}).limit(60);if(!data)return;
+const act=data.filter(o=>next[o.status]).reverse(),old=data.filter(o=>!next[o.status]),n=act.filter(o=>o.status==='new').length;
+if(lastN>=0&&n>lastN)beep();lastN=n;
+box.innerHTML=(act.map(oc).join('')||'<p class="mute">No active orders.</p>')+(old.length?`<h3 class="mute">Done</h3>${old.slice(0,15).map(oc).join('')}`:'')}
+function ordersView(){shell('<div id="ord"></div>');lastN=-1;loadOrders();timer=setInterval(loadOrders,4000)}
+function menuView(){shell(`<button class="btn big" onclick="editItem()">+ Add item</button><div id="form"></div>${S.items.map(i=>`<div class="card row"><div class="grow"><b>${esc(i.name)}</b><div class="mute small">${esc(i.category)} · ${money(i.price)}</div></div><label><input type="checkbox" style="width:auto" ${i.available?'checked':''} onchange="sb.from('cafe_items').update({available:this.checked}).eq('id','${i.id}')"> On</label><button onclick="editItem('${i.id}')">Edit</button><button onclick="delItem('${i.id}')">🗑</button></div>`).join('')}`)}
+function editItem(id){const i=S.items.find(x=>x.id===id)||{};
+$('#form').innerHTML=`<div class="card"><input id="fn" placeholder="Name" value="${esc(i.name)}"><input id="fa" placeholder="Arabic name (optional)" value="${esc(i.name_ar)}"><input id="fc" placeholder="Category (e.g. Coffee)" value="${esc(i.category)}"><input id="fp" type="number" step="0.01" placeholder="Price" value="${esc(i.price)}"><input id="fd" placeholder="Description" value="${esc(i.description)}"><div class="grid4"><input id="fk" type="number" placeholder="Calories" value="${esc(i.kcal)}"><input id="fpr" type="number" placeholder="Protein g" value="${esc(i.protein)}"><input id="ff" type="number" placeholder="Fat g" value="${esc(i.fat)}"><input id="fcb" type="number" placeholder="Carbs g" value="${esc(i.carbs)}"></div><input id="fi" placeholder="Image link (optional)" value="${esc(i.image)}"><button class="btn big" onclick="saveItem('${i.id||''}')">Save</button></div>`;scrollTo(0,0)}
+async function saveItem(id){const n=x=>{const v=$(x).value.trim();return v===''?null:+v};
+const r={name:$('#fn').value.trim(),name_ar:$('#fa').value.trim()||null,category:$('#fc').value.trim()||'Menu',price:n('#fp'),description:$('#fd').value.trim()||null,kcal:n('#fk'),protein:n('#fpr'),fat:n('#ff'),carbs:n('#fcb'),image:$('#fi').value.trim()||null};
+if(!r.name||r.price==null)return alert('Name and price are needed');
+const{error}=await(id?sb.from('cafe_items').update(r).eq('id',id):sb.from('cafe_items').insert(r));error?alert(error.message):staff()}
+async function delItem(id){if(!confirm('Delete this item?'))return;await sb.from('cafe_items').delete().eq('id',id);staff()}
+function setupView(){const base=location.origin+location.pathname;
+shell(`<div class="card"><input id="sn" value="${esc(S.cfg.name)}" placeholder="Cafe name"><input id="st" type="number" min="1" value="${esc(S.cfg.tables)}" placeholder="Number of tables"><input id="sc" value="${esc(S.cfg.currency)}" placeholder="Currency"><button class="btn big" onclick="saveCfg()">Save</button></div>
+<div class="card"><input id="ae" type="email" placeholder="Add staff email (they must create an account first)"><button class="btn" onclick="addStaff()">Add staff</button></div>
+<button class="btn big" onclick="print()">Print table QR codes</button>
+<div class="qrs">${Array.from({length:Math.min(+S.cfg.tables||0,200)},(_,k)=>k+1).map(n=>`<div class="qr"><img alt="" src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(base+'?t='+n)}"><b>${esc(S.cfg.name)} · Table ${n}</b></div>`).join('')}</div>`)}
+async function saveCfg(){const r={id:1,name:$('#sn').value.trim()||'Cafe',tables:+$('#st').value||1,currency:$('#sc').value.trim()||'AED'};const{error}=await sb.from('cafe_settings').upsert(r);error?alert(error.message):(S.cfg=r,staff())}
+async function addStaff(){const{data,error}=await sb.rpc('cafe_add_admin',{e:$('#ae').value.trim()});alert(error?error.message:data?'Staff added':'Not allowed')}
+
+/* ---------- start ---------- */
+async function route(){clearInterval(timer);dir();
+if(location.hash==='#staff')return staff();
+await load();S.table=new URLSearchParams(location.search).get('t');const o=ls.get('oid');o?track(o):renderMenu()}
+if(SUPABASE_URL.startsWith('YOUR')){app.innerHTML='<main><h2>Setup needed</h2><p>Put your Supabase URL and anon key at the top of this file.</p></main>'}
+else{sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);addEventListener('hashchange',route);route()}
+</script></body></html>
+  
